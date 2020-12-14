@@ -1,0 +1,17 @@
+sbatch convert_to_vcf.sh
+sbatch bgzip.sh
+sbatch concat.sh
+sbatch remove_ambiguous_snps.sh
+sbatch clump_vcf.sh
+R: source("prep_daner.R")
+awk 'NR!=1{print $3}' /vol/sci/bio/data/shai.carmi/db2175/embryo_selection/daner_no_ambiguous.clumped > /vol/sci/bio/data/shai.carmi/db2175/embryo_selection/daner.valid.snp
+sbatch calculate_scores.sh
+
+./get_maps.sh
+cd /vol/sci/bio/data/shai.carmi/db2175/embryo_selection
+vcftools --gzvcf LIJMC/LIJMC_all_chrs_no_ambiguous.vcf.gz --snps daner.valid.snp --recode --out LIJMC_score_snps
+source("select_couples.R")
+cd /vol/sci/bio/data/shai.carmi/db2175/embryo_selection
+plink2 --vcf LIJMC_score_snps.recode.vcf --freq --out LIJMC_score_snps.recode_freq
+sbatch do_recombine.sh
+source("collect_scores.R")
