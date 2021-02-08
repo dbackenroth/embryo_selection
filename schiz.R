@@ -39,6 +39,12 @@ parents <- dat$parents %>%
   mutate(prev = if_else(pheno == 0, 0.99, 0.01)) %>%
   group_by(pheno) %>%
   mutate(weight = prev / n())
+
+ggplot(parents, aes(x=score, y=risk)) + 
+  geom_line() + 
+  geom_smooth(aes(x = score, y = pheno), col = "red") + 
+  theme_bw()
+
 quantiles <- data.frame(prob = seq(0.6, 0.99, by = 0.01))
 quantiles$q_val <- wtd.quantile(x = parents$score, prob = quantiles$prob, weights = parents$weight, normwt = T)
 quantiles$q_exclude <- 1 - quantiles$prob

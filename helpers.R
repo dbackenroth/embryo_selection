@@ -33,7 +33,7 @@ get_data <- function() {
     log(SAMPLE_PREV / (1 - SAMPLE_PREV))
   adjusted_risk <- 1 / (1 + exp(-adjusted_link))
   sim_scores[, `:=`(risk = adjusted_risk, unadj_risk = predict(mod, newdata = sim_scores, type = "response"))]
-  
+  parents_scores[, `:=`(risk = predict(mod, newdata = parents_scores, type = "response"))]
   return(list(sim = sim_scores, parents = parents_scores))
 }
 
