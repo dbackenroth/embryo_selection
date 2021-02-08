@@ -2,7 +2,7 @@ library(data.table)
 library(glue)
 dir <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/"
 daner_file <- glue("{dir}/daner_PGC_SCZ_w3_90_0518d__lencz.gz")
-#daner <- fread(daner_file)
+daner <- fread(daner_file)
 vcf_file <- glue("gunzip -c {dir}/LIJMC/LIJMC_all_chrs_no_ambiguous.vcf.gz | cut -f1,2,3,4,5")
 vcf <- fread(cmd = vcf_file, skip = "#CHROM")
 clumped <- fread(glue("{dir}/daner_no_ambiguous.clumped"))
