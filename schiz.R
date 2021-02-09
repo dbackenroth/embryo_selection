@@ -1,5 +1,6 @@
 PREV <- 0.01
-R2 <- 0.051
+#R2 <- 0.0678
+R2 <- 0.06
 library(purrr)
 library(Hmisc)
 
@@ -12,7 +13,7 @@ GetRiskReduction <- function(dat, strategy = "lowest_risk", n = NULL,
                                               by = .(p1_pheno, p2_pheno)]
   if (strategy == "lowest_risk") {
     selected_child <- dat[cnum <= n, .(risk = min(risk)), 
-                                  by = .(p1, p2, p1_pheno, p2_pheno)]
+                          by = .(p1, p2, p1_pheno, p2_pheno)]
   } else if (strategy == "hre") {
     dat[, `:=`(above_threshold = score >= threshold)]
     selected_child <- dat[cnum <= 5, .(all_above = all(above_threshold),
@@ -25,12 +26,15 @@ GetRiskReduction <- function(dat, strategy = "lowest_risk", n = NULL,
   
   probs <- c((1 - PREV)^2, 2 * (1 - PREV) * PREV, PREV^2)
   #child1_by_parent_status$prob_couple <- probs
-  RRR <- 1 - sum(strategy_risk$mean_risk * probs / first_child_by_parent_status$mean_risk)
+  strategy_risk_ave <- sum(strategy_risk$mean_risk * probs)
+  first_child_risk_ave <- sum(first_child_by_parent_status$mean_risk * probs)
+  
+  #RRR <- 1 - sum(strategy_risk$mean_risk * probs / first_child_by_parent_status$mean_risk)
+  RRR <- 1 - strategy_risk_ave / first_child_risk_ave
   ret <- data.frame(RRR = RRR) %>%
     mutate(n = n, strategy = strategy, q_exclude = q_exclude, threshold = threshold)
   return(ret)
 }
-
 
 dat <- get_data()
 sim <- dat$sim
@@ -50,8 +54,8 @@ quantiles$q_val <- wtd.quantile(x = parents$score, prob = quantiles$prob, weight
 quantiles$q_exclude <- 1 - quantiles$prob
 
 grid_hre <- data.frame(strategy = rep("hre", nrow(quantiles)), 
-                   q_exclude = quantiles$q_exclude, 
-                   threshold = quantiles$q_val)
+                       q_exclude = quantiles$q_exclude, 
+                       threshold = quantiles$q_val)
 res_hre <- pmap_dfr(grid_hre, GetRiskReduction, dat = sim)
 res_hre$theoretical <- NA
 for (i in 1:nrow(res_hre)) {
@@ -60,7 +64,7 @@ for (i in 1:nrow(res_hre)) {
 }
 
 grid_lr <- data.frame(strategy = rep("lowest_risk", 20), 
-                   n = 1:20)
+                      n = 1:20)
 res_lr <- pmap_dfr(grid_lr, GetRiskReduction, dat = sim)
 res_lr$theoretical <- NA
 for (i in 1:nrow(res_lr)) {
@@ -70,48 +74,48 @@ plot(res_lr$n, res_lr$RRR, type = 'l', ylim = c(0, 1))
 lines(res_lr$n, res_lr$theoretical, col = "blue")
 
 p_hre <- ggplot(res_hre %>% 
-         mutate(RRR = RRR * 100, 
-                q_exclude = q_exclude * 100,
-                theoretical = theoretical * 100),
-       aes(x = q_exclude, y = RRR)) + 
+                  mutate(RRR = RRR * 100, 
+                         q_exclude = q_exclude * 100,
+                         theoretical = theoretical * 100),
+                aes(x = q_exclude, y = RRR)) + 
   geom_point() + 
   geom_line(aes(x = q_exclude, y = theoretical)) + 
   theme_bw() + 
   ylab("Risk reduction (%)") + 
   xlab("Percentile PRS to exclude")
-ggsave(glue("hre_r2_{R2}.pdf"))
+ggsave(glue("hre_r2_{R2}.pdf"), height = 3, width = 3)
 p_lr <- ggplot(res_lr %>% 
-         mutate(RRR = RRR * 100, 
-                theoretical = theoretical * 100),
-       aes(x = n, y = RRR)) + 
+                 mutate(RRR = RRR * 100, 
+                        theoretical = theoretical * 100),
+               aes(x = n, y = RRR)) + 
   geom_point() + 
   geom_line(aes(x = n, y = theoretical)) + 
   theme_bw() + 
   ylab("Risk reduction (%)") + 
   xlab("Number of embryos")
-ggsave(glue("lr_r2_{R2}.pdf"))
+ggsave(glue("lr_r2_{R2}.pdf"), height = 3, width = 3)
 
 #best_of_5 <- GetRiskReduction(dat, strategy = "lowest_risk", n = 5)
 #best_of_5 <- GetRisk(dat, )
 
 
 if (F) {
-#rr_a <- 1 / (1 + exp(-rr))
-#rr2 <- predict(mod, newdata = sim_scores, type = "response")
-
-child1 <- sim_scores[cnum == 1, .(risk, p1, p2, p1_pheno, p2_pheno)]
-child1_by_parent_status <- child1[, .(mean_risk = mean(risk)), 
-                                  by = .(p1_pheno, p2_pheno)]
-best_child_of_5 <- sim_scores[cnum <= 5, .(risk = min(risk)), 
-                              by = .(p1, p2, p1_pheno, p2_pheno)]
-best_child_of_5_by_parent_status <- best_child_of_5[, .(mean_risk = mean(risk)), 
-                                                    by = .(p1_pheno, p2_pheno)]
-probs <- c(0.99^2, NA, 0.01^2)
-probs[2] <- 1 - sum(probs, na.rm = T)
-#child1_by_parent_status$prob_couple <- probs
-RR <- 1 - sum(best_child_of_5_by_parent_status$mean_risk * probs / child1_by_parent_status$mean_risk)
-
-risk_reduction_lowest(r = 0.0583, K = 0.01, n = 5)
+  #rr_a <- 1 / (1 + exp(-rr))
+  #rr2 <- predict(mod, newdata = sim_scores, type = "response")
+  
+  child1 <- sim_scores[cnum == 1, .(risk, p1, p2, p1_pheno, p2_pheno)]
+  child1_by_parent_status <- child1[, .(mean_risk = mean(risk)), 
+                                    by = .(p1_pheno, p2_pheno)]
+  best_child_of_5 <- sim_scores[cnum <= 5, .(risk = min(risk)), 
+                                by = .(p1, p2, p1_pheno, p2_pheno)]
+  best_child_of_5_by_parent_status <- best_child_of_5[, .(mean_risk = mean(risk)), 
+                                                      by = .(p1_pheno, p2_pheno)]
+  probs <- c(0.99^2, NA, 0.01^2)
+  probs[2] <- 1 - sum(probs, na.rm = T)
+  #child1_by_parent_status$prob_couple <- probs
+  RR <- 1 - sum(best_child_of_5_by_parent_status$mean_risk * probs / child1_by_parent_status$mean_risk)
+  
+  risk_reduction_lowest(r = 0.0583, K = 0.01, n = 5)
 }
 # adjust logistic regression model
 #   https://core.ac.uk/download/pdf/61320341.pdf
