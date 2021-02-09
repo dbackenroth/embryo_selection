@@ -9,7 +9,7 @@ options(stringsAsFactors = F)
 MAP_DIR <- "/Users/dbackenr/OneDrive - JNJ/huji/haploseek_v2/GeneticMap/Refined_genetic_map_b37/"
 MAP_DIR <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/Maps/Refined_genetic_map_b37/"
 OUT_DIR <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/Peds/"
-COUPLES_FILE <- "//cs/icore/db2175/embryos/selected_couples.csv"
+COUPLES_FILE <- "//cs/icore/db2175/embryo_selection/selected_couples.csv"
 VCF_FILE <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/LIJMC_score_snps.recode.vcf"
 CALCULATE_SCORES_SCRIPT <- "./calculate_scores_children.sh"
 
