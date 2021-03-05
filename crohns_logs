@@ -1,0 +1,22 @@
+PLINK v2.00a2.3LM 64-bit Intel (24 Jan 2020)   www.cog-genomics.org/plink/2.0/
+(C) 2005-2020 Shaun Purcell, Christopher Chang   GNU General Public License v3
+Logging to ToddSamples.log.
+Options in effect:
+  --bfile ToddSamples
+  --export vcf
+  --out ToddSamples
+
+Start time: Fri Mar  5 17:22:45 2021
+64334 MiB RAM detected; reserving 32167 MiB for main workspace.
+Using up to 32 threads (change this with --threads).
+257 samples (120 females, 134 males, 3 ambiguous; 257 founders) loaded from
+ToddSamples.fam.
+632270 variants loaded from ToddSamples.bim.
+Note: No phenotype data present.
+--export vcf to ToddSamples.vcf ... done.
+Warning: At least one VCF allele code violates the official specification;
+other tools may not accept the file.  (Valid codes must either start with a
+'<', only contain characters in {A
+,C,G,T,N,a,c,g,t,n}, be an isolated '*', or
+represent a breakend.)
+End time: Fri Mar  5 17:22:47 2021
