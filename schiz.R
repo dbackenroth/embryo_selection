@@ -1,6 +1,8 @@
 PREV <- 0.01
-#R2 <- 0.0678
-R2 <- 0.06
+R2 <- 0.0678
+#R2 <- 0.062
+NORM_APPROX <- T
+
 library(purrr)
 library(Hmisc)
 
@@ -49,9 +51,18 @@ ggplot(parents, aes(x=score, y=risk)) +
   geom_smooth(aes(x = score, y = pheno), col = "red") + 
   theme_bw()
 
+wmean <- wtd.mean(x = parents$score, weights = parents$weight, normwt = T)
+wvar <- wtd.var(x = parents$score, weights = parents$weight, normwt = T)
+
 quantiles <- data.frame(prob = seq(0.6, 0.99, by = 0.01))
-quantiles$q_val <- wtd.quantile(x = parents$score, prob = quantiles$prob, weights = parents$weight, normwt = T)
 quantiles$q_exclude <- 1 - quantiles$prob
+if (NORM_APPROX) {
+  quantiles$q_val <- qnorm(quantiles$prob, mean = wmean, sd = sqrt(wvar))
+} else {
+  quantiles$q_val <- wtd.quantile(x = parents$score, prob = quantiles$prob, 
+                                  weights = parents$weight, normwt = T)
+}
+#type=c('quantile','(i-1)/(n-1)','i/(n+1)','i/n')
 
 grid_hre <- data.frame(strategy = rep("hre", nrow(quantiles)), 
                        q_exclude = quantiles$q_exclude, 
@@ -83,7 +94,7 @@ p_hre <- ggplot(res_hre %>%
   theme_bw() + 
   ylab("Risk reduction (%)") + 
   xlab("Percentile PRS to exclude")
-ggsave(glue("hre_r2_{R2}.pdf"), height = 3, width = 3)
+ggsave(glue("hre_r2_{R2}_norm_approx{NORM_APPROX}.pdf"), height = 3, width = 3)
 p_lr <- ggplot(res_lr %>% 
                  mutate(RRR = RRR * 100, 
                         theoretical = theoretical * 100),
@@ -93,7 +104,7 @@ p_lr <- ggplot(res_lr %>%
   theme_bw() + 
   ylab("Risk reduction (%)") + 
   xlab("Number of embryos")
-ggsave(glue("lr_r2_{R2}.pdf"), height = 3, width = 3)
+ggsave(glue("lr_r2_{R2}_norm_approx{NORM_APPROX}.pdf"), height = 3, width = 3)
 
 #best_of_5 <- GetRiskReduction(dat, strategy = "lowest_risk", n = 5)
 #best_of_5 <- GetRisk(dat, )

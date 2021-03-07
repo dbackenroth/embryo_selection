@@ -2,24 +2,108 @@ library(MASS)
 library(glue)
 library(dplyr)
 library(data.table)
+library(ggplot2)
+library(latex2exp)
 
-get_data <- function() {
-  
+get_data_helper <- function() {
   DIR <- "~/Documents/Docs/embryos/"
-  sim_scores <- fread(glue("gunzip -c {DIR}/sim_scores.csv.gz"))
+  sim_scores <- fread(glue("gunzip -c {DIR}/sim_scores.csv_old.gz"))
   sim_scores[, c("p1", "p2", "cnum") := tstrsplit(id, "_", fixed=TRUE, type.convert = T)]
   
   parents_info <- fread(glue("{DIR}/LIJMC37_.1.sample"))
   p_info <- parents_info[, .(ID_1, plink_pheno)]
+  
+  parents_scores <- fread(glue("{DIR}/LIJMC_scores.sscore"))
+  return(list(sim_scores = sim_scores, p_info = p_info, parents_scores = parents_scores))
+}
+
+compare_variance <- function() {
+  l <- get_data_helper()
+  children <- l$sim_scores
+  var_children <- children %>%
+    group_by(p1, p2) %>%
+    summarise(var = var(score), 
+              mean = mean(score))
+  p_info <- l$p_info
+  setnames(p_info, c("#IID", "pheno"))
+  parents <- l$parents_scores
+  parents <- merge(parents, p_info, by = "#IID")
+  
+  parent_scores0 <- unique(children[, .(p1, p2)])
+  parents1 <- parents %>%
+    transmute(p1 = `#IID`, p1_score = SCORE1_AVG, p1_pheno = pheno)
+  parents2 <- parents %>%
+    transmute(p2 = `#IID`, p2_score = SCORE1_AVG, p2_pheno = pheno)
+  parent_scores <- reduce(list(parent_scores0, parents1, parents2), left_join) %>%
+    mutate(average_score = (p1_score + p2_score) / 2) 
+  bins_data <- left_join(var_children, parent_scores, by = c("p1", "p2")) %>%
+    mutate(num_parents_schiz = (p1_pheno == 2) + (p2_pheno == 2), 
+           parent_score_diff = abs(p1_score - p2_score)) %>%
+    ungroup()
+  # variance depends on difference between parent scores as well as average score
+  # difference depends on average score
+  mod <- lm(var ~ poly(parent_score_diff, 3), bins_data)
+  bd <- bins_data %>%
+    ungroup() %>%
+    mutate(resid = residuals(mod))
+  ggplot(bd, aes(x = average_score, y = resid)) + geom_smooth()
+  browser()
+  plot(bins_data$average_score, residuals(mod))
+  
+  p <- ggplot(bins_data, aes(x = average_score, y = var)) + 
+    geom_smooth() #+ 
+    #facet_wrap(~num_parents_schiz)
+  
+  browser()
+  
+  
+  
+  parents <- parents %>%
+    group_by(pheno) %>%
+    mutate(weight = if_else(pheno == 1, 0.99 / n(), 0.01 / n()))
+  wtd_var <- wtd.var(parents$SCORE1_AVG, weights = parents$weight, normwt = T)
+  cat("Weighted variance parents:", wtd_var, "\n")
+  cat("Unweighted variance parents:", var(parents$SCORE1_AVG), "\n")
+  cat("Mean variance children conditional on parents:", mean(var_children$var), "\n")
+  cat("Variance parents by phenotype\n")
+  parents %>%
+    ungroup() %>%
+    mutate(pheno = if_else(pheno==2, "Schiz.", "Not schiz.")) %>%
+    group_by(pheno) %>%
+    summarise(v = var(SCORE1_AVG))
+  
+  var <- wtd_var
+  n <- 20
+  sims <- rchisq(600000, df = n - 1) / (n-1) * (wtd_var / 2)
+  var_children$v2 <-  var_children$var
+  aa <- bind_rows(var_children %>% transmute(type = "observed", var = v2), 
+                  data.frame(var = sims) %>%
+                    mutate(type = "theoretical"))
+  ggplot(aa, aes(x = var, col = type)) + 
+    geom_density() + 
+    xlab("Sampling variance") +
+    geom_vline(xintercept = wtd_var / 2)
+  
+  browser()
+}
+
+get_data <- function() {
+  l <- get_data_helper()
+  sim_scores <- l$sim_scores
+  parents_scores <- l$parents_scores
+  p_info <- l$p_info
+  
   setnames(p_info, c("p1", "p1_pheno"))
   sim_scores <- merge(sim_scores, p_info)
   setnames(p_info, c("p2", "p2_pheno"))
   sim_scores <- merge(sim_scores, p_info, by = "p2")
   sim_scores[, `:=`(id = NULL)]
+  browser()
+  
   
   couples <- unique(sim_scores[, .(p1, p2, p1_pheno, p2_pheno)])
   
-  parents_scores <- fread(glue("{DIR}/LIJMC_scores.sscore"))
+  #parents_scores <- fread(glue("{DIR}/LIJMC_scores.sscore"))
   setnames(p_info, c("#IID", "pheno"))
   parents_scores <- merge(parents_scores, p_info, by = "#IID")
   parents_scores[, `:=`(pheno = as.numeric(pheno) - 1)]
