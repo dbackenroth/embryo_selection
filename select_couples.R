@@ -12,7 +12,7 @@ merged <- merge(as.data.frame(samples1), as.data.frame(samples2))
 subset <- merged %>% filter(!ID.1 == 0, !ID.2 == 0, ID.1 < ID.2)
 selected <- subset %>% 
   group_by(pheno.1, pheno.2) %>% 
-	slice(sample(1:n(), 1000)) %>%
+	slice(sample(1:n(), 10000)) %>%
 	ungroup()
 
 write.csv(selected, "selected_couples.csv", row.names = F)

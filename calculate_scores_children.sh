@@ -10,7 +10,8 @@ dir=/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/
 selected_snps=${dir}/daner.valid.snp
 gwas_info=${dir}/daner_flipped.tsv
 out=${vcf}.scores
-freq=${dir}/LIJMC_score_snps.recode_freq.afreq
+#freq=${dir}/LIJMC_score_snps.recode_freq.afreq
 
-plink2 --vcf $vcf --score $gwas_info list-variants 3 5 9 header --extract $selected_snps --out $out --read-freq $freq
+plink2 --vcf $vcf --score $gwas_info list-variants 3 5 9 header --extract $selected_snps --out $out
+#--read-freq $freq
 
