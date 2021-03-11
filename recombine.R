@@ -6,12 +6,20 @@ library(tidyr)
 
 options(stringsAsFactors = F)
 
-MAP_DIR <- "/Users/dbackenr/OneDrive - JNJ/huji/haploseek_v2/GeneticMap/Refined_genetic_map_b37/"
-MAP_DIR <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/Maps/Refined_genetic_map_b37/"
-OUT_DIR <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/Peds/"
-COUPLES_FILE <- "//cs/icore/db2175/embryo_selection/selected_couples.csv"
-VCF_FILE <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/LIJMC_score_snps.recode.vcf"
-CALCULATE_SCORES_SCRIPT <- "./calculate_scores_children.sh"
+if (exists("run_locally")) {
+  MAP_DIR <- "/Users/dbackenr/OneDrive - JNJ/huji/haploseek_v2/GeneticMap/Refined_genetic_map_b37/"
+  COUPLES_FILE <- "selected_couples.csv"
+  OUT_DIR <- "."
+  VCF_FILE <- "~/Documents/Docs/embryos/LIJMC_score_snps.recode.vcf.gz"
+  GWAS_FILE <- "~/Documents/Docs/embryos/daner_flipped.tsv"
+  FREQ_FILE <- "~/Documents/Docs/embryos/LIJMC_score_snps.recode_freq.afreq"
+} else {
+  MAP_DIR <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/Maps/Refined_genetic_map_b37/"
+  OUT_DIR <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/Peds/"
+  COUPLES_FILE <- "//cs/icore/db2175/embryo_selection/selected_couples.csv"
+  VCF_FILE <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/LIJMC_score_snps.recode.vcf"
+  CALCULATE_SCORES_SCRIPT <- "./calculate_scores_children.sh"
+}
 
 #couples <- data.frame(p1 = c("SZPABR0002", "SZPABR0003"), 
 #                      p2 = c("SZPABR0003", "SZPABR0005"))
@@ -30,7 +38,7 @@ GetHaplotype <- function(chr_data, which_haplotype) {
 GetParentVCF <- function(vcf, sample_id) {
   vcf_sel <- copy(vcf)
   setnames(vcf_sel, sample_id, "h")
-  vcf_sel <- vcf_sel[, .(CHROM, POS, ID, h)]
+  vcf_sel <- vcf_sel[, .(CHROM, POS, REF, ALT, ID, h)]
   vcf_sel[, c("h1", "h2") := tstrsplit(h, "|", fixed = T)]
   return(vcf_sel)
 }
