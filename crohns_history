@@ -5,26 +5,29 @@ bgzip ToddSamples.vcf
 tabix ToddSamples.vcf.gz
 # bim has info for chromosomes 0-26, may need to filter out that data, 
 # also some alleles have code I and D or 0
+sbatch phase.sh
+./concat.sh "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/crohns/phasing/phase*vcf.gz" "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/crohns/phased.vcf"
+./remove_ambiguous_snps.sh "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/crohns/phased.vcf.gz" "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/crohns/phased_no_ambiguous.vcf"
+cd /vol/sci/bio/data/shai.carmi/db2175/embryo_selection/crohns
+#/cs/icore/db2175/embryo_selection/clump_vcf.sh "phased_no_ambiguous.vcf.gz" "CD_trans_ethnic_association_summ_stats_b37.txt.gz" "CD_no_ambiguous" "P_EUR"
+/cs/icore/db2175/embryo_selection/clump_vcf.sh "phased_no_ambiguous.vcf.gz" "EUR.CD.gwas_info03_filtered.assoc" "EUR.CD_no_ambiguous"
+R: source("prep_gwas_crohns.R")
 
-
-
-
-
-sbatch convert_to_vcf.sh
-sbatch bgzip.sh
-sbatch concat.sh
-sbatch remove_ambiguous_snps.sh
-sbatch clump_vcf.sh
-R: source("prep_daner.R")
-awk 'NR!=1{print $3}' /vol/sci/bio/data/shai.carmi/db2175/embryo_selection/daner_no_ambiguous.clumped > /vol/sci/bio/data/shai.carmi/db2175/embryo_selection/daner.valid.snp
+awk 'NR!=1{print $3}' /vol/sci/bio/data/shai.carmi/db2175/embryo_selection/crohns/EUR.CD_no_ambiguous.clumped > /vol/sci/bio/data/shai.carmi/db2175/embryo_selection/crohns/daner.valid.snp
 sbatch calculate_scores.sh
 
 ./get_maps.sh
-cd /vol/sci/bio/data/shai.carmi/db2175/embryo_selection
-vcftools --gzvcf LIJMC/LIJMC_all_chrs_no_ambiguous.vcf.gz --snps daner.valid.snp --recode --out LIJMC_score_snps
+cd /vol/sci/bio/data/shai.carmi/db2175/embryo_selection/crohns
+
+# vcftools requires vcf 4.2 version so downgrade
+gunzip phased_no_ambiguous.vcf.gz
+sed 's/^##fileformat=VCFv4.3/##fileformat=VCFv4.2/' phased_no_ambiguous.vcf > phased_no_ambiguous_v4.2.vcf
+bgzip phased_no_ambiguous_v4.2.vcf
+tabix phased_no_ambiguous_v4.2.vcf.gz
+vcftools --gzvcf phased_no_ambiguous_v4.2.vcf.gz --snps daner.valid.snp --recode --out score_snps
+plink2 --vcf score_snps.recode.vcf --freq --out score_snps.recode_freq
+
 source("select_couples.R")
-cd /vol/sci/bio/data/shai.carmi/db2175/embryo_selection
-plink2 --vcf LIJMC_score_snps.recode.vcf --freq --out LIJMC_score_snps.recode_freq
 sbatch do_recombine.sh
 source("collect_scores.R")
 source("schiz.R") # make plots

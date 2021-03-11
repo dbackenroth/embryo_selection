@@ -3,7 +3,7 @@ sbatch bgzip.sh
 sbatch concat.sh
 sbatch remove_ambiguous_snps.sh
 sbatch clump_vcf.sh
-R: source("prep_daner.R")
+R: source("prep_gwas_schiz.R")
 awk 'NR!=1{print $3}' /vol/sci/bio/data/shai.carmi/db2175/embryo_selection/daner_no_ambiguous.clumped > /vol/sci/bio/data/shai.carmi/db2175/embryo_selection/daner.valid.snp
 sbatch calculate_scores.sh
 
