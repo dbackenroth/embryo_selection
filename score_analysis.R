@@ -1,7 +1,8 @@
 library(glue)
 library(data.table)
 library(pROC)
-source("get_ages.R")
+source("helpers.R")
+#source("get_ages.R")
 
 #dir <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/"
 
@@ -9,7 +10,8 @@ CrohnsR2 <- function() {
   dir <- "~/Documents/Docs/embryos/crohns/"
   scores_file <- glue("{dir}/parents_scores.sscore")
   demog <- GetAges("crohns")
-  GetR2(scores_file, demog, K = 0.013, label = "crohns")
+  GetR2(scores_file, demog, K = 0.013, label = "crohns") %>%
+    return()
 }
 
 #scores_file <- glue("{dir}/LIJMC_scores.sscore_OLD.sscore")
@@ -17,7 +19,8 @@ SchizR2 <- function() {
   dir <- "~/Documents/Docs/embryos/"
   scores_file <- glue("{dir}/LIJMC_scores.sscore")
   demog <- GetAges("schiz")
-  GetR2(scores_file, demog, K = 0.01, label = "schizophrenia")
+  GetR2(scores_file, demog, K = 0.01, label = "schizophrenia") %>%
+    return()
 }
 
 GetR2 <- function(scores_file, demog, K, label) {
@@ -52,13 +55,13 @@ GetR2 <- function(scores_file, demog, K, label) {
     xlab("Model prediction") + 
     xlim(0, 1) + 
     ylab("% cases (smoothed)")
-  ggsave(glue("{label}_model_calibration.pdf"))
+  ggsave(glue("Results/{label}_model_calibration.pdf"))
   ggplot(no_nas, aes(x = pred1)) + 
     geom_density() + 
     xlab("Model prediction") + 
     theme_bw() + 
     xlim(0, 1)
-  ggsave(glue("{label}_predictions_in_training_set.pdf"))
+  ggsave(glue("Results/{label}_predictions_in_training_set.pdf"))
   
   
   corr <- cor(regr_data$SCORE1_AVG, regr_data$pheno)
@@ -84,5 +87,6 @@ GetR2 <- function(scores_file, demog, K, label) {
   theta = m * (P-K)/(1-K) * (m*(P-K)/(1-K)-t)
   r2_liab = r2*C / (1+r2*theta*C)
   
-  cat(sprintf("R^2 on the liability scale: %g\n",r2_liab))
+  cat(sprintf("R^2 on the liability scale: %g\n", r2_liab))
+  return(r2_liab)
 }

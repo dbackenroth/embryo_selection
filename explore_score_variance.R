@@ -1,7 +1,102 @@
-run_locally <- T
-source("recombine.R")
+#run_locally <- T
+#source("recombine.R")
+library(Hmisc)
 source("helpers.R")
-source("get_ages.R")
+library(gridExtra)
+
+CROHNS <- "crohns"
+CROHNS_PREVALENCE <- 0.013
+SCHIZ <- "schiz"
+SCHIZ_PREVALENCE <- 0.01
+
+if (F) {
+  variance_plot(CROHNS, CROHNS_PREVALENCE, "Results/crohns_variance.pdf")
+  variance_plot(SCHIZ, SCHIZ_PREVALENCE, "Results/schiz_variance.pdf")
+}
+
+
+variance_plot <- function(disease, prevalence, out_file) {
+  l <- get_data(disease = disease, prevalence = prevalence)
+  children <- l$sim_scores
+  var_children <- children %>%
+    group_by(p1, p2) %>%
+    summarise(var = var(score), 
+              mean = mean(score), 
+              average_parental_score = first((p1_score + p2_score) / 2), 
+              num_parents_cases = first((p1_pheno == 1) + (p2_pheno == 1)), 
+              .groups = "drop")
+  num_couples <- var_children %>%
+    group_by(num_parents_cases) %>%
+    count() %>%
+    ungroup()
+  stopifnot(n_distinct(num_couples$n) == 1)
+  num_to_sample <- num_couples %>%
+    mutate(num_to_sample = case_when(num_parents_cases == 0 ~ as.numeric(n), 
+                                     num_parents_cases == 1 ~ round(n * 2 * prevalence * (1 - prevalence)), 
+                                     num_parents_cases == 2 ~ round(n * prevalence ^ 2))) %>%
+    dplyr::select(-n)
+  
+  sampled <- var_children %>%
+    left_join(num_to_sample, by = "num_parents_cases") %>%
+    group_by(num_parents_cases) %>%
+    mutate(i = 1:n()) %>%
+    filter(i <= num_to_sample)
+  
+  ee <- ecdf(sampled$average_parental_score)
+  sampled$q <- ee(sampled$average_parental_score)
+  p1 <- ggplot(sampled, aes(x = q, y = var)) + 
+    geom_smooth() +#method = 'gam',
+                #formula = y ~ splines::ns(x, 5)) + #ylim(0, 5e-09) + 
+    xlab("Mid-parental PRS (quantile)") + 
+    ylab("Variance of embryos PRSs") + theme_bw() + 
+    geom_point(alpha = 0.05)#+ 
+  
+  parents <- l$p_info %>%
+    group_by(pheno) %>%
+    mutate(weight = if_else(pheno == 0, (1 - prevalence) / n(), prevalence / n()))
+  wtd_var <- wtd.var(parents$score, weights = parents$weight, normwt = T)
+  cat("Weighted variance parents:", wtd_var, "\n")
+  cat("Unweighted variance parents:", var(parents$score), "\n")
+  cat("Mean variance children conditional on parents:", mean(sampled$var), "\n")
+  cat("Variance parents by phenotype\n")
+  parents %>%
+    ungroup() %>%
+    mutate(pheno = if_else(pheno==1, "Case", "Control")) %>%
+    group_by(pheno) %>%
+    summarise(v = var(score))
+  
+  
+  n <- 20
+  sims <- rchisq(600000, df = n - 1) / (n-1) * (wtd_var / 2)
+  var_children$v2 <-  var_children$var
+  aa <- bind_rows(var_children %>% transmute(type = "observed", var = v2), 
+                  data.frame(var = sims) %>%
+                    mutate(type = "theoretical"))
+  p2 <- ggplot(aa, aes(x = var, col = type)) + 
+    geom_density() + 
+    xlab("Sampling variance") +
+    geom_vline(xintercept = wtd_var / 2) + 
+    theme_bw() + 
+    xlim(0, wtd_var * 2) + 
+    ylab("Density") + 
+    scale_color_discrete("")
+  pdf(out_file, height = 8, width = 12)
+  grid.arrange(p1, p2, nrow = 1)
+  dev.off()
+}
+
+# for (id in sample_ids[1:500]) {
+#   
+#   parent_vcf <- GetParentVCF(vcf = vcf, sample_id = id)
+#   
+#   score <- mean(0.5 * (1 - as.numeric(merged$h1)) * merged$BETA + 0.5 * (1 - as.numeric(merged$h2)) * merged$BETA)
+#   
+#   merged[, `:=`(het = !h1 == h2)]
+#   merged[, `:=`(var = if_else(het, 0.25 * 0.25 * merged$BETA ^ 2, 0))]
+#   total_var <- sum(merged$var) / nrow(merged)^2
+#   vars <- c(vars, total_var)
+# }
+
 
 get_var_contributions <- function() {
   if (F) {
@@ -29,11 +124,11 @@ get_var_contributions <- function() {
   joined$abs_beta <- abs(joined$BETA)
   joined$beta_neg <- joined$BETA < 0
   joined$effect_allele_freq <- 1 - joined$ALT_FREQS
-
+  
   sample_ids <- colnames(vcf)[10:ncol(vcf)]
   dir <- "~/Documents/Docs/embryos/"
   scores_file <- glue("{dir}/LIJMC_scores.sscore")
-
+  
   scores <- fread(scores_file)
   setnames(scores, '#IID', 'ID')
   other_dat <- GetAges()[, .(ID, plink_pheno)]
@@ -99,105 +194,3 @@ get_var_contributions <- function() {
     ylab("Variance of gamete PRS")
   browser()
 }
-
-
-compare_variance <- function(remove_dups = F) {
-  l <- get_data_helper()
-  children <- l$sim_scores
-  var_children <- children %>%
-    group_by(p1, p2) %>%
-    summarise(var = var(score), 
-              mean = mean(score))
-  p_info <- l$p_info
-  setnames(p_info, c("#IID", "pheno"))
-  parents <- l$parents_scores
-  parents <- merge(parents, p_info, by = "#IID")
-  
-  parent_scores0 <- unique(children[, .(p1, p2)])
-  parents1 <- parents %>%
-    transmute(p1 = `#IID`, p1_score = SCORE1_AVG, p1_pheno = pheno)
-  parents2 <- parents %>%
-    transmute(p2 = `#IID`, p2_score = SCORE1_AVG, p2_pheno = pheno)
-  parent_scores <- reduce(list(parent_scores0, parents1, parents2), left_join) %>%
-    mutate(average_score = (p1_score + p2_score) / 2) 
-  bins_data <- left_join(var_children, parent_scores, by = c("p1", "p2")) %>%
-    mutate(num_parents_schiz = (p1_pheno == 2) + (p2_pheno == 2), 
-           parent_score_diff = abs(p1_score - p2_score)) %>%
-    ungroup()
-  # variance depends on difference between parent scores as well as average score
-  # difference depends on average score
-  mod <- lm(var ~ poly(parent_score_diff, 3), bins_data)
-  bd <- bins_data %>%
-    ungroup() %>%
-    mutate(resid = residuals(mod))
-  ggplot(bd, aes(x = average_score, y = resid)) + geom_smooth()
-  
-  if (remove_dups) {
-    bins_data <- group_by(bins_data, p1) %>%
-      slice(1) %>%
-      group_by(p2) %>%
-      slice(1)
-  }
-  
-  bins_data <- bins_data %>%
-    group_by(num_parents_schiz) %>%
-    mutate(max = case_when(num_parents_schiz == 0 ~ if_else(remove_dups, 962, 10000),   #962
-                           num_parents_schiz == 1 ~ if_else(remove_dups, 200, 19), #200, # 19,      
-                           num_parents_schiz == 2 ~ 1)) #0))      # 1
-  
-  sampled <- bins_data %>%
-    group_by(num_parents_schiz) %>%
-    mutate(i = 1:n()) %>%
-    filter(i <= max)
-  ee <- ecdf(sampled$average_score)
-  sampled$q <- ee(sampled$average_score)
-  p <- ggplot(sampled, aes(x = q, y = var)) + 
-    geom_smooth() + #ylim(0, 5e-09) + 
-    xlab("Mid-parental PRS (quantile)") + 
-    ylab("Variance of embryos PRSs") + theme_bw() + geom_point(alpha = 0.1)#+ 
-  #facet_wrap(~num_parents_schiz)
-  print(p)
-  ggsave("variance_by_midparental_prs_quantiles.pdf")
-  browser()
-  
-  parents <- parents %>%
-    group_by(pheno) %>%
-    mutate(weight = if_else(pheno == 1, 0.99 / n(), 0.01 / n()))
-  wtd_var <- wtd.var(parents$SCORE1_AVG, weights = parents$weight, normwt = T)
-  cat("Weighted variance parents:", wtd_var, "\n")
-  cat("Unweighted variance parents:", var(parents$SCORE1_AVG), "\n")
-  cat("Mean variance children conditional on parents:", mean(var_children$var), "\n")
-  cat("Variance parents by phenotype\n")
-  parents %>%
-    ungroup() %>%
-    mutate(pheno = if_else(pheno==2, "Schiz.", "Not schiz.")) %>%
-    group_by(pheno) %>%
-    summarise(v = var(SCORE1_AVG))
-  
-  var <- wtd_var
-  n <- 20
-  sims <- rchisq(600000, df = n - 1) / (n-1) * (wtd_var / 2)
-  var_children$v2 <-  var_children$var
-  aa <- bind_rows(var_children %>% transmute(type = "observed", var = v2), 
-                  data.frame(var = sims) %>%
-                    mutate(type = "theoretical"))
-  ggplot(aa, aes(x = var, col = type)) + 
-    geom_density() + 
-    xlab("Sampling variance") +
-    geom_vline(xintercept = wtd_var / 2)
-  
-  browser()
-}
-
-# for (id in sample_ids[1:500]) {
-#   
-#   parent_vcf <- GetParentVCF(vcf = vcf, sample_id = id)
-#   
-#   score <- mean(0.5 * (1 - as.numeric(merged$h1)) * merged$BETA + 0.5 * (1 - as.numeric(merged$h2)) * merged$BETA)
-#   
-#   merged[, `:=`(het = !h1 == h2)]
-#   merged[, `:=`(var = if_else(het, 0.25 * 0.25 * merged$BETA ^ 2, 0))]
-#   total_var <- sum(merged$var) / nrow(merged)^2
-#   vars <- c(vars, total_var)
-# }
-

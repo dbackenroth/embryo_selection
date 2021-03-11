@@ -1,15 +1,12 @@
-PREV <- 0.01
-R2 <- 0.0678
-#R2 <- 0.062
-NORM_APPROX <- T
-
 library(purrr)
 library(Hmisc)
 
+source("explore_score_variance.R")
 source("helpers.R")
+source("score_analysis.R")
 
 GetRiskReduction <- function(dat, strategy = "lowest_risk", n = NULL, 
-                             q_exclude = NULL, threshold = NULL, ...) {
+                             q_exclude = NULL, threshold = NULL, prevalence, ...) {
   first_child <- dat[cnum == 1, .(risk, p1, p2, p1_pheno, p2_pheno)]
   first_child_by_parent_status <- first_child[, .(mean_risk = mean(risk)),
                                               by = .(p1_pheno, p2_pheno)]
@@ -26,7 +23,7 @@ GetRiskReduction <- function(dat, strategy = "lowest_risk", n = NULL,
   strategy_risk <- selected_child[, .(mean_risk = mean(risk)), 
                                   by = .(p1_pheno, p2_pheno)]
   
-  probs <- c((1 - PREV)^2, 2 * (1 - PREV) * PREV, PREV^2)
+  probs <- c((1 - prevalence)^2, 2 * (1 - prevalence) * prevalence, prevalence^2)
   #child1_by_parent_status$prob_couple <- probs
   strategy_risk_ave <- sum(strategy_risk$mean_risk * probs)
   first_child_risk_ave <- sum(first_child_by_parent_status$mean_risk * probs)
@@ -38,74 +35,78 @@ GetRiskReduction <- function(dat, strategy = "lowest_risk", n = NULL,
   return(ret)
 }
 
-dat <- get_data()
-sim <- dat$sim
-parents <- dat$parents %>%
-  as.data.frame() %>%
-  mutate(prev = if_else(pheno == 0, 0.99, 0.01)) %>%
-  group_by(pheno) %>%
-  mutate(weight = prev / n())
-
-ggplot(parents, aes(x=score, y=risk)) + 
-  geom_line() + 
-  geom_smooth(aes(x = score, y = pheno), col = "red") + 
-  theme_bw()
-
-wmean <- wtd.mean(x = parents$score, weights = parents$weight, normwt = T)
-wvar <- wtd.var(x = parents$score, weights = parents$weight, normwt = T)
-
-quantiles <- data.frame(prob = seq(0.6, 0.99, by = 0.01))
-quantiles$q_exclude <- 1 - quantiles$prob
-if (NORM_APPROX) {
-  quantiles$q_val <- qnorm(quantiles$prob, mean = wmean, sd = sqrt(wvar))
-} else {
-  quantiles$q_val <- wtd.quantile(x = parents$score, prob = quantiles$prob, 
-                                  weights = parents$weight, normwt = T)
-}
-#type=c('quantile','(i-1)/(n-1)','i/(n+1)','i/n')
-
-grid_hre <- data.frame(strategy = rep("hre", nrow(quantiles)), 
-                       q_exclude = quantiles$q_exclude, 
-                       threshold = quantiles$q_val)
-res_hre <- pmap_dfr(grid_hre, GetRiskReduction, dat = sim)
-res_hre$theoretical <- NA
-for (i in 1:nrow(res_hre)) {
-  res_hre$theoretical[i] <- risk_reduction_exclude(r = sqrt(R2), K = PREV, n = 5, 
-                                                   q = res_hre$q_exclude[i])
+if (F) {
+  schiz_r2 <- SchizR2()
+  ScoreAnalysis(disease = SCHIZ, prevalence = SCHIZ_PREVALENCE, r2_liability = schiz_r2, norm_approximation = T)
+  crohns_r2 <- CrohnsR2()
+  ScoreAnalysis(disease = CROHNS, prevalence = CROHNS_PREVALENCE, r2_liability = crohns_r2, norm_approximation = T)
 }
 
-grid_lr <- data.frame(strategy = rep("lowest_risk", 20), 
-                      n = 1:20)
-res_lr <- pmap_dfr(grid_lr, GetRiskReduction, dat = sim)
-res_lr$theoretical <- NA
-for (i in 1:nrow(res_lr)) {
-  res_lr$theoretical[i] <- risk_reduction_lowest(r = sqrt(R2), K = PREV, n = res_lr$n[i])
+ScoreAnalysis <- function(disease, prevalence, r2_liability, norm_approximation) {
+  dat <- get_data(disease = disease, prevalence = prevalence)
+
+  sim <- dat$sim_scores
+  parents <- dat$p_info %>%
+    as.data.frame() %>%
+    mutate(prev = if_else(pheno == 0, 1 - prevalence, prevalence)) %>%
+    group_by(pheno) %>%
+    mutate(weight = prev / n())
+  
+  wmean <- wtd.mean(x = parents$score, weights = parents$weight, normwt = T)
+  wvar <- wtd.var(x = parents$score, weights = parents$weight, normwt = T)
+  
+  quantiles <- data.frame(prob = seq(0.6, 0.99, by = 0.01))
+  quantiles$q_exclude <- 1 - quantiles$prob
+  if (norm_approximation) {
+    quantiles$q_val <- qnorm(quantiles$prob, mean = wmean, sd = sqrt(wvar))
+  } else {
+    quantiles$q_val <- wtd.quantile(x = parents$score, prob = quantiles$prob, 
+                                    weights = parents$weight, normwt = T)
+  }
+  #type=c('quantile','(i-1)/(n-1)','i/(n+1)','i/n')
+  
+  grid_hre <- data.frame(strategy = rep("hre", nrow(quantiles)), 
+                         q_exclude = quantiles$q_exclude, 
+                         threshold = quantiles$q_val)
+  res_hre <- pmap_dfr(grid_hre, GetRiskReduction, dat = sim, prevalence = prevalence)
+  res_hre$theoretical <- NA
+  for (i in 1:nrow(res_hre)) {
+    res_hre$theoretical[i] <- risk_reduction_exclude(r = sqrt(r2_liability), K = prevalence, n = 5, 
+                                                     q = res_hre$q_exclude[i])
+  }
+  
+  grid_lr <- data.frame(strategy = rep("lowest_risk", 20), 
+                        n = 1:20)
+  res_lr <- pmap_dfr(grid_lr, GetRiskReduction, dat = sim, prevalence = prevalence)
+  res_lr$theoretical <- NA
+  for (i in 1:nrow(res_lr)) {
+    res_lr$theoretical[i] <- risk_reduction_lowest(r = sqrt(r2_liability), K = prevalence, n = res_lr$n[i])
+  }
+  plot(res_lr$n, res_lr$RRR, type = 'l', ylim = c(0, 1))
+  lines(res_lr$n, res_lr$theoretical, col = "blue")
+  
+  p_hre <- ggplot(res_hre %>% 
+                    mutate(RRR = RRR * 100, 
+                           q_exclude = q_exclude * 100,
+                           theoretical = theoretical * 100),
+                  aes(x = q_exclude, y = RRR)) + 
+    geom_point() + 
+    geom_line(aes(x = q_exclude, y = theoretical)) + 
+    theme_bw() + 
+    ylab("Risk reduction (%)") + 
+    xlab("Percentile PRS to exclude")
+  ggsave(glue("Results/{disease}_hre_r2_{r2_liability}_norm_approx{norm_approximation}.pdf"), height = 3, width = 3)
+  p_lr <- ggplot(res_lr %>% 
+                   mutate(RRR = RRR * 100, 
+                          theoretical = theoretical * 100),
+                 aes(x = n, y = RRR)) + 
+    geom_point() + 
+    geom_line(aes(x = n, y = theoretical)) + 
+    theme_bw() + 
+    ylab("Risk reduction (%)") + 
+    xlab("Number of embryos")
+  ggsave(glue("Results/{disease}_lr_r2_{r2_liability}_norm_approx{norm_approximation}.pdf"), height = 3, width = 3)
 }
-plot(res_lr$n, res_lr$RRR, type = 'l', ylim = c(0, 1))
-lines(res_lr$n, res_lr$theoretical, col = "blue")
-
-p_hre <- ggplot(res_hre %>% 
-                  mutate(RRR = RRR * 100, 
-                         q_exclude = q_exclude * 100,
-                         theoretical = theoretical * 100),
-                aes(x = q_exclude, y = RRR)) + 
-  geom_point() + 
-  geom_line(aes(x = q_exclude, y = theoretical)) + 
-  theme_bw() + 
-  ylab("Risk reduction (%)") + 
-  xlab("Percentile PRS to exclude")
-ggsave(glue("hre_r2_{R2}_norm_approx{NORM_APPROX}.pdf"), height = 3, width = 3)
-p_lr <- ggplot(res_lr %>% 
-                 mutate(RRR = RRR * 100, 
-                        theoretical = theoretical * 100),
-               aes(x = n, y = RRR)) + 
-  geom_point() + 
-  geom_line(aes(x = n, y = theoretical)) + 
-  theme_bw() + 
-  ylab("Risk reduction (%)") + 
-  xlab("Number of embryos")
-ggsave(glue("lr_r2_{R2}_norm_approx{NORM_APPROX}.pdf"), height = 3, width = 3)
-
 #best_of_5 <- GetRiskReduction(dat, strategy = "lowest_risk", n = 5)
 #best_of_5 <- GetRisk(dat, )
 

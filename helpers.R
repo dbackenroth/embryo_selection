@@ -5,53 +5,122 @@ library(data.table)
 library(ggplot2)
 library(latex2exp)
 library(purrr)
+library(readxl)
+library(lubridate)
 
-get_data_helper <- function() {
-  DIR <- "~/Documents/Docs/embryos/"
-  sim_scores <- fread(glue("gunzip -c {DIR}/sim_scores.csv.gz"))
-  sim_scores[, c("p1", "p2", "cnum") := tstrsplit(id, "_", fixed=TRUE, type.convert = T)]
-  
-  parents_info <- fread(glue("{DIR}/LIJMC37_.1.sample"))
-  p_info <- parents_info[, .(ID_1, plink_pheno)]
-  
-  parents_scores <- fread(glue("{DIR}/LIJMC_scores.sscore"))
-  return(list(sim_scores = sim_scores, p_info = p_info, parents_scores = parents_scores))
+# ID, AGE, plink_pheno, sex (1, 2)
+GetAges <- function(disease = "schiz") {
+  if (disease == "crohns") {
+    DIR <- "~/Documents/Docs/embryos/crohns/"
+    Process <- function(x) {
+      x %>%
+        mutate(ID = paste(FIDplink, IIDplink, sep = "_"), 
+               plink_pheno = if_else(diagnosis=="Control", 1, 2), 
+               sex = if_else(PhenoGender == "Male", 1, 2), 
+               AGE = runif(n(), min = 25, max = 100))
+    }
+    cases <- read_excel(glue("{DIR}/SampleInfo.xlsx"), sheet = "Cases") %>%
+      Process()
+    controls <- read_excel(glue("{DIR}/SampleInfo.xlsx"), sheet = "Controls") %>%
+      Process()
+    both <- bind_rows(cases, controls) %>%
+      dplyr::select(ID, AGE, plink_pheno, sex)
+    return(both)
+  }
+  if (disease == "schiz") {
+    DIR <- "~/Documents/Docs/embryos/fwdexternalreagesoftheajszsamples/"
+    ids <- fread("~/Documents/Docs/embryos/LIJMC37_.1.sample")
+    control_ids <- ids[plink_pheno == 1, ID_1]
+    controls <- read_excel(glue("{DIR}/control samples data.xls"))
+    control_data <- controls %>%
+      filter(INL_ID %in% control_ids) %>%
+      dplyr::select(ID = INL_ID, AGE = AGE)
+    
+    #Attached are 3 files relating to my schizophrenia case-control cohort:
+    # 1) age data for the controls (straightforward);
+    
+    # 2 & 3) age data for the cases, divided by prefix (SZP and SZA) - 
+    # ages need to be calculated by subtracting date of blood draw (tab 1, column B) 
+    # from month/year of birth (tab 2, columns C&D).
+    
+    CaseAge <- function(f, num1, num2) {
+      s1 <- read_excel(glue("{DIR}/{f}.xls"), sheet = num1) %>%
+        dplyr::select(ID = `Book Number`, blood_draw_date = `1-2`) %>%
+        mutate(blood_draw_date = as.Date(blood_draw_date, "%d/%m/%y"))
+      s2 <- read_excel(glue("{DIR}/{f}.xls"), sheet = num2) %>%
+        dplyr::select(ID = `Book Number`, month_birth = `2-9-1`, year_birth = `2-9-2`) %>%
+        mutate(month_birth = if_else(is.na(month_birth), "06", month_birth)) %>%
+        mutate(date_birth = as.Date(glue("{year_birth}-{month_birth}-01")))
+      joined <- left_join(s1, s2, by = "ID") %>%
+        mutate(AGE = round(as.numeric(blood_draw_date - date_birth) / 365)) %>%
+        dplyr::select(ID, AGE)
+      return(joined)
+    }
+    cases1 <- CaseAge("SZA", num1 = 12, num2 = 11)
+    cases2 <- CaseAge("SZP", num1 = 13, num2 = 12)
+    
+    all <- bind_rows(control_data, cases1, cases2) %>%
+      distinct()
+    
+    ids_joined <- inner_join(ids %>% mutate(ID = ID_1), all, by = "ID")
+    return(ids_joined[, .(ID, AGE, plink_pheno, sex)])
+  }
 }
 
-
-
-get_data <- function() {
-  l <- get_data_helper()
-  sim_scores <- l$sim_scores
-  parents_scores <- l$parents_scores
-  p_info <- l$p_info
-  
-  setnames(p_info, c("p1", "p1_pheno"))
-  sim_scores <- merge(sim_scores, p_info)
-  setnames(p_info, c("p2", "p2_pheno"))
-  sim_scores <- merge(sim_scores, p_info, by = "p2")
+get_data_helper <- function(disease) {
+  DIR <- "~/Documents/Docs/embryos/"
+  if (disease == "schiz") {
+    sim_scores <- fread(glue("gunzip -c {DIR}/sim_scores.csv.gz"))
+    sim_scores[, c("p1", "p2", "cnum") := tstrsplit(id, "_", fixed=TRUE, type.convert = T)]
+    p_info <- GetAges(disease = disease)
+    parents_scores <- fread(glue("{DIR}/LIJMC_scores.sscore"))
+    gwas_info <- fread(glue("{DIR}/daner_flipped.tsv"))
+  } 
+  if (disease == "crohns") {
+    dir <- glue("{DIR}/{disease}/")
+    p_info <- GetAges(disease = disease)
+    sim_scores <- fread(glue("gunzip -c {dir}/sim_scores.csv.gz"))
+    sim_scores[, c("p1", "p2", "cnum") := tstrsplit(id, "%", fixed=TRUE, type.convert = T)]
+    gwas_info <- fread(glue("{dir}/daner_flipped.tsv"))
+    parents_scores <- fread(glue("{dir}/parents_scores.sscore"))
+  }
   sim_scores[, `:=`(id = NULL)]
-  browser()
+  p_info <- as.data.table(p_info)
+  p_info[, `:=`(pheno = as.numeric(plink_pheno) - 1)]
+  p_info[, `:=`(plink_pheno = NULL)]
   
+  setnames(p_info, "ID", "IID")
+  setnames(parents_scores, "#IID", "IID")
+  p_info <- merge(p_info, parents_scores, by = "IID")
+  setnames(p_info, "SCORE1_AVG", "score")
+  p1 <- p_info[, .(IID, pheno, score)]
   
-  couples <- unique(sim_scores[, .(p1, p2, p1_pheno, p2_pheno)])
-  
-  #parents_scores <- fread(glue("{DIR}/LIJMC_scores.sscore"))
-  setnames(p_info, c("#IID", "pheno"))
-  parents_scores <- merge(parents_scores, p_info, by = "#IID")
-  parents_scores[, `:=`(pheno = as.numeric(pheno) - 1)]
-  setnames(parents_scores, "SCORE1_AVG", "score")
-  mod <- glm(pheno ~ score, family = binomial(), data = parents_scores)
+  p2 <- copy(p1)
+  cols <- c("IID", "pheno", "score")
+  setnames(p1, cols, c("p1", "p1_pheno", "p1_score"))
+  setnames(p2, cols, c("p2", "p2_pheno", "p2_score"))
+  s1 <- merge(sim_scores, p1, by = "p1")
+  s2 <- merge(s1, p2, by = "p2")
+  setnames(gwas_info, "new_BETA", "BETA")
+  return(list(sim_scores = s2, p_info = p_info, gwas_info = gwas_info))
+}
+
+get_data <- function(disease = "schiz", prevalence = 0.01) {
+  l <- get_data_helper(disease = disease)
+  sim_scores <- l$sim_scores
+  p_info <- l$p_info
+  mod <- glm(pheno ~ score, family = binomial(), data = p_info)
   
   #sim_scores[, `:=`(risk = predict(mod, newdata = sim_scores, type = "response"))]
-  SAMPLE_PREV <- mean(parents_scores$pheno == 1)
+  SAMPLE_PREV <- mean(p_info$pheno == 1)
+  
   adjusted_link <- predict(mod, newdata = sim_scores, type = "link") + 
-    log(PREV / (1 - PREV)) - 
+    log(prevalence / (1 - prevalence)) - 
     log(SAMPLE_PREV / (1 - SAMPLE_PREV))
   adjusted_risk <- 1 / (1 + exp(-adjusted_link))
   sim_scores[, `:=`(risk = adjusted_risk, unadj_risk = predict(mod, newdata = sim_scores, type = "response"))]
-  parents_scores[, `:=`(risk = predict(mod, newdata = parents_scores, type = "response"))]
-  return(list(sim = sim_scores, parents = parents_scores))
+  p_info[, `:=`(risk = predict(mod, newdata = p_info, type = "response"))]
+  return(list(sim_scores = sim_scores, p_info = p_info, gwas_info = l$gwas_info))
 }
 
 risk_reduction_lowest = function(r,K,n)
