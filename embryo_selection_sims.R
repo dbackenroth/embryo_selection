@@ -5,11 +5,27 @@ source("explore_score_variance.R")
 source("helpers.R")
 source("score_analysis.R")
 
+MakeSimPanelFigure <- function(crohns_prevalence = 0.005){
+  print("Schizophrenia")
+  schiz_r2 <- SchizR2(SCHIZ_PREVALENCE)
+  l1 <- ScoreAnalysis(disease = SCHIZ, prevalence = SCHIZ_PREVALENCE, r2_liability = schiz_r2, norm_approximation = T)
+  print("Crohn's")
+  crohns_r2 <- CrohnsR2(crohns_prevalence)
+  l2 <- ScoreAnalysis(disease = CROHNS, prevalence = crohns_prevalence, r2_liability = crohns_r2, norm_approximation = T)
+  
+  pdf(glue("Results/sim_plot_crohns_prevalence{crohns_prevalence}.pdf"), height = 6, width = 8)
+  grid.arrange(l1$p_hre + ggtitle("A (Schizophrenia)"), l1$p_lr + ggtitle("B (Schizophrenia)"), 
+               l2$p_hre + ggtitle("C (Crohn's Disease)"), l2$p_lr + ggtitle("D (Crohn's Disease)"), 
+               nrow = 2)
+  dev.off()
+}
+
 GetRiskReduction <- function(dat, strategy = "lowest_risk", n = NULL, 
                              q_exclude = NULL, threshold = NULL, prevalence, ...) {
   first_child <- dat[cnum == 1, .(risk, p1, p2, p1_pheno, p2_pheno)]
-  first_child_by_parent_status <- first_child[, .(mean_risk = mean(risk)),
-                                              by = .(p1_pheno, p2_pheno)]
+  #first_child_by_parent_status <- first_child[, .(mean_risk = mean(risk), 
+  #                                                sum_risk = sum(risk)),
+  #                                            by = .(p1_pheno, p2_pheno)]
   if (strategy == "lowest_risk") {
     selected_child <- dat[cnum <= n, .(risk = min(risk)), 
                           by = .(p1, p2, p1_pheno, p2_pheno)]
@@ -20,31 +36,38 @@ GetRiskReduction <- function(dat, strategy = "lowest_risk", n = NULL,
                                                       risk[!above_threshold][1])), 
                           by = .(p1, p2, p1_pheno, p2_pheno)]
   }
-  strategy_risk <- selected_child[, .(mean_risk = mean(risk)), 
-                                  by = .(p1_pheno, p2_pheno)]
+  #strategy_risk <- selected_child[, .(mean_risk = mean(risk), 
+  #                                    sum_risk = sum(risk)), 
+  #                                by = .(p1_pheno, p2_pheno)]
   
-  probs <- c((1 - prevalence)^2, 2 * (1 - prevalence) * prevalence, prevalence^2)
+  #no_disease <- (1 - prevalence) ^ 2
+  #both_disease <- prevalence ^ 2
+  #one_disease <- 1 - no_disease - both_disease
+  #probs_df <- data.frame(p1_pheno = c(0, 0, 1, 1), 
+  #                       p2_pheno = c(0, 1, 0, 1), 
+  #                       probs = c(no_disease, one_disease, one_disease, both_disease))
+  
+  #strategy_risk <- merge(strategy_risk, probs_df, by = c("p1_pheno", "p2_pheno"))
+  #first_child_by_parent_status <- merge(first_child_by_parent_status, probs_df, by = c("p1_pheno", "p2_pheno"))
+  
   #child1_by_parent_status$prob_couple <- probs
-  strategy_risk_ave <- sum(strategy_risk$mean_risk * probs)
-  first_child_risk_ave <- sum(first_child_by_parent_status$mean_risk * probs)
-  
+  #strategy_risk_ave <- sum(strategy_risk$mean_risk) # * strategy_risk$probs)
+  #first_child_risk_ave <- sum(first_child_by_parent_status$mean_risk) # * first_child_by_parent_status$probs)
+
   #RRR <- 1 - sum(strategy_risk$mean_risk * probs / first_child_by_parent_status$mean_risk)
-  RRR <- 1 - strategy_risk_ave / first_child_risk_ave
+  RRR <- 1 - sum(selected_child$risk) / sum(first_child$risk) # strategy_risk$sum_risk)strategy_risk_ave / first_child_risk_ave
   ret <- data.frame(RRR = RRR) %>%
     mutate(n = n, strategy = strategy, q_exclude = q_exclude, threshold = threshold)
   return(ret)
 }
 
-if (F) {
-  schiz_r2 <- SchizR2()
-  ScoreAnalysis(disease = SCHIZ, prevalence = SCHIZ_PREVALENCE, r2_liability = schiz_r2, norm_approximation = T)
-  crohns_r2 <- CrohnsR2()
-  ScoreAnalysis(disease = CROHNS, prevalence = CROHNS_PREVALENCE, r2_liability = crohns_r2, norm_approximation = T)
+ApproxEqual <- function(x, y) {
+  abs(x-y) < 0.00001
 }
 
 ScoreAnalysis <- function(disease, prevalence, r2_liability, norm_approximation) {
-  dat <- get_data(disease = disease, prevalence = prevalence)
-
+  dat <- get_data(disease = disease, prevalence = prevalence, num_couples = 5000)
+  
   sim <- dat$sim_scores
   parents <- dat$p_info %>%
     as.data.frame() %>%
@@ -55,8 +78,10 @@ ScoreAnalysis <- function(disease, prevalence, r2_liability, norm_approximation)
   wmean <- wtd.mean(x = parents$score, weights = parents$weight, normwt = T)
   wvar <- wtd.var(x = parents$score, weights = parents$weight, normwt = T)
   
-  quantiles <- data.frame(prob = seq(0.6, 0.99, by = 0.01))
+  quantiles <- data.frame(prob = seq(0.6, 1, length.out = 21))
+  quantiles[quantiles == 1] <- 0.999
   quantiles$q_exclude <- 1 - quantiles$prob
+  
   if (norm_approximation) {
     quantiles$q_val <- qnorm(quantiles$prob, mean = wmean, sd = sqrt(wvar))
   } else {
@@ -82,30 +107,51 @@ ScoreAnalysis <- function(disease, prevalence, r2_liability, norm_approximation)
   for (i in 1:nrow(res_lr)) {
     res_lr$theoretical[i] <- risk_reduction_lowest(r = sqrt(r2_liability), K = prevalence, n = res_lr$n[i])
   }
-  plot(res_lr$n, res_lr$RRR, type = 'l', ylim = c(0, 1))
-  lines(res_lr$n, res_lr$theoretical, col = "blue")
-  
-  p_hre <- ggplot(res_hre %>% 
-                    mutate(RRR = RRR * 100, 
-                           q_exclude = q_exclude * 100,
-                           theoretical = theoretical * 100),
+  res_lr$theoretical[res_lr$theoretical < 0] <- 0
+  #plot(res_lr$n, res_lr$RRR, type = 'l', ylim = c(0, 1))
+  #lines(res_lr$n, res_lr$theoretical, col = "blue")
+  res_hre <- res_hre %>%
+    mutate(RRR = RRR * 100, 
+           q_exclude = q_exclude * 100, 
+           theoretical = theoretical * 100)
+  p_hre <- ggplot(res_hre,
                   aes(x = q_exclude, y = RRR)) + 
     geom_point() + 
     geom_line(aes(x = q_exclude, y = theoretical)) + 
     theme_bw() + 
     ylab("Risk reduction (%)") + 
     xlab("Percentile PRS to exclude")
-  ggsave(glue("Results/{disease}_hre_r2_{r2_liability}_norm_approx{norm_approximation}.pdf"), height = 3, width = 3)
-  p_lr <- ggplot(res_lr %>% 
-                   mutate(RRR = RRR * 100, 
-                          theoretical = theoretical * 100),
+  for_lines <- res_hre %>%
+    filter(ApproxEqual(q_exclude, 2))
+  p_hre <- p_hre + 
+    geom_segment(data = for_lines, aes(x = q_exclude, xend = q_exclude, y = RRR, yend=0)) + 
+    #geom_segment(data = for_lines, aes(x = q_exclude, xend = q_exclude, y = theoretical, yend=0)) + 
+    geom_segment(data = for_lines, aes(x = 0, xend = q_exclude, y = RRR, yend=RRR)) +
+    coord_cartesian(xlim = c(0, 40), ylim=c(0, 100), expand = F)#+ 
+    #scale_x_continuous(expand = c(0, 0), limits = c(0, NA)) + 
+    #scale_y_continuous(expand = c(0, 0), limits = c(0, NA))##+ 
+    #geom_segment(data = for_lines, aes(x = 0, xend = q_exclude, y = theoretical, yend=theoretical))
+  
+  res_lr <- res_lr %>%
+    mutate(RRR = RRR * 100, 
+           theoretical = theoretical * 100)
+  
+  p_lr <- ggplot(res_lr,
                  aes(x = n, y = RRR)) + 
     geom_point() + 
     geom_line(aes(x = n, y = theoretical)) + 
     theme_bw() + 
     ylab("Risk reduction (%)") + 
     xlab("Number of embryos")
-  ggsave(glue("Results/{disease}_lr_r2_{r2_liability}_norm_approx{norm_approximation}.pdf"), height = 3, width = 3)
+  for_lines <- res_lr %>%
+    filter(ApproxEqual(n, 5))
+  p_lr <- p_lr + 
+    geom_segment(data = for_lines, aes(x = n, xend = n, y = RRR, yend=0)) + 
+   # geom_segment(data = for_lines, aes(x = n, xend = n, y = theoretical, yend=0)) + 
+    geom_segment(data = for_lines, aes(x = 0, xend = n, y = RRR, yend=RRR)) +
+    coord_cartesian(xlim = c(0, 20), ylim=c(0, 100), expand = F)#+ 
+    #geom_segment(data = for_lines, aes(x = 0, xend = n, y = theoretical, yend=theoretical))
+  return(list(p_hre = p_hre, p_lr = p_lr))
 }
 #best_of_5 <- GetRiskReduction(dat, strategy = "lowest_risk", n = 5)
 #best_of_5 <- GetRisk(dat, )

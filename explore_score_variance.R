@@ -3,53 +3,37 @@
 library(Hmisc)
 source("helpers.R")
 library(gridExtra)
+library(glue)
 
 CROHNS <- "crohns"
-CROHNS_PREVALENCE <- 0.013
+
 SCHIZ <- "schiz"
 SCHIZ_PREVALENCE <- 0.01
 
-if (F) {
-  variance_plot(CROHNS, CROHNS_PREVALENCE, "Results/crohns_variance.pdf")
-  variance_plot(SCHIZ, SCHIZ_PREVALENCE, "Results/schiz_variance.pdf")
+MakePanelFigure <- function(crohns_prevalence = 0.005) {
+  l1 <- variance_plot(CROHNS, crohns_prevalence, alpha = 0.04)
+  l2 <- variance_plot(SCHIZ, SCHIZ_PREVALENCE, alpha = 0.04)
+  pdf(glue("Results/variance_plot_crohns_prevalence{crohns_prevalence}.pdf"), height = 6, width = 6)
+  grid.arrange(l2$p1 + ggtitle("A (Schizophrenia)"), l2$p2 + ggtitle("B (Schizophrenia)") + theme(legend.position = "none"), 
+               l1$p1 + ggtitle("C (Crohn's  Disease)"), l1$p2 + ggtitle("D (Crohn's Disease)") + theme(legend.position = "bottom"), 
+               nrow = 2)
+  dev.off()
 }
 
-
-variance_plot <- function(disease, prevalence, out_file) {
-  l <- get_data(disease = disease, prevalence = prevalence)
+variance_plot <- function(disease, prevalence, alpha) {
+  l <- get_data(disease = disease, prevalence = prevalence, num_couples = 5000)
   children <- l$sim_scores
-  var_children <- children %>%
+  sampled <- children %>%
     group_by(p1, p2) %>%
     summarise(var = var(score), 
               mean = mean(score), 
               average_parental_score = first((p1_score + p2_score) / 2), 
               num_parents_cases = first((p1_pheno == 1) + (p2_pheno == 1)), 
               .groups = "drop")
-  num_couples <- var_children %>%
-    group_by(num_parents_cases) %>%
-    count() %>%
-    ungroup()
-  stopifnot(n_distinct(num_couples$n) == 1)
-  num_to_sample <- num_couples %>%
-    mutate(num_to_sample = case_when(num_parents_cases == 0 ~ as.numeric(n), 
-                                     num_parents_cases == 1 ~ round(n * 2 * prevalence * (1 - prevalence)), 
-                                     num_parents_cases == 2 ~ round(n * prevalence ^ 2))) %>%
-    dplyr::select(-n)
-  
-  sampled <- var_children %>%
-    left_join(num_to_sample, by = "num_parents_cases") %>%
-    group_by(num_parents_cases) %>%
-    mutate(i = 1:n()) %>%
-    filter(i <= num_to_sample)
   
   ee <- ecdf(sampled$average_parental_score)
   sampled$q <- ee(sampled$average_parental_score)
-  p1 <- ggplot(sampled, aes(x = q, y = var)) + 
-    geom_smooth() +#method = 'gam',
-                #formula = y ~ splines::ns(x, 5)) + #ylim(0, 5e-09) + 
-    xlab("Mid-parental PRS (quantile)") + 
-    ylab("Variance of embryos PRSs") + theme_bw() + 
-    geom_point(alpha = 0.05)#+ 
+  
   
   parents <- l$p_info %>%
     group_by(pheno) %>%
@@ -65,24 +49,33 @@ variance_plot <- function(disease, prevalence, out_file) {
     group_by(pheno) %>%
     summarise(v = var(score))
   
-  
+  p1 <- ggplot(sampled, aes(x = q, y = var)) + 
+    geom_smooth() +#method = 'gam',
+    #formula = y ~ splines::ns(x, 5)) + #ylim(0, 5e-09) + 
+    xlab("Mid-parental PRS (quantile)") + 
+    ylab("Variance of embryo PRSs") + theme_bw(13) + 
+    geom_point(alpha = alpha)+ 
+    geom_hline(yintercept = wtd_var, alpha = 0.25) + 
+    coord_cartesian(xlim = c(0, 1), ylim=c(0, wtd_var * 1.5), expand = F) + 
+    scale_x_continuous(breaks = seq(0, 1, by = 0.25), labels = c("0", "0.25", "0.5", "0.75", 1))
+    
   n <- 20
   sims <- rchisq(600000, df = n - 1) / (n-1) * (wtd_var / 2)
-  var_children$v2 <-  var_children$var
-  aa <- bind_rows(var_children %>% transmute(type = "observed", var = v2), 
+  
+  for_plot <- bind_rows(sampled %>% transmute(type = "observed", var), 
                   data.frame(var = sims) %>%
                     mutate(type = "theoretical"))
-  p2 <- ggplot(aa, aes(x = var, col = type)) + 
+  p2 <- ggplot(for_plot, aes(x = var, col = type)) + 
     geom_density() + 
-    xlab("Sampling variance") +
-    geom_vline(xintercept = wtd_var / 2) + 
-    theme_bw() + 
+    xlab("Variance of embryo PRSs") +
+    #geom_hline(yintercept = wtd_var) + 
+    theme_bw(13) + 
     xlim(0, wtd_var * 2) + 
     ylab("Density") + 
     scale_color_discrete("")
-  pdf(out_file, height = 8, width = 12)
-  grid.arrange(p1, p2, nrow = 1)
-  dev.off()
+  
+  return(list(p1 = p1, p2 = p2))
+  
 }
 
 # for (id in sample_ids[1:500]) {

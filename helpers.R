@@ -105,9 +105,37 @@ get_data_helper <- function(disease) {
   return(list(sim_scores = s2, p_info = p_info, gwas_info = gwas_info))
 }
 
-get_data <- function(disease = "schiz", prevalence = 0.01) {
+get_data <- function(disease = "schiz", prevalence = 0.01, num_couples = 5000) {
   l <- get_data_helper(disease = disease)
-  sim_scores <- l$sim_scores
+  sim_scores <- l$sim_scores %>%
+    mutate(num_parents_cases = p1_pheno + p2_pheno, 
+           couple = paste(p1, p2))
+  if (!is.null(num_couples)) {
+    num_aval_couples <- sim_scores %>%
+      group_by(num_parents_cases) %>%
+      count() %>%
+      ungroup()
+    stopifnot(n_distinct(num_aval_couples$n) == 1)
+    num_to_sample <- num_aval_couples %>%
+      mutate(num_to_sample = case_when(num_parents_cases == 0 ~ round(num_couples * (1 - prevalence) ^ 2), 
+                                       num_parents_cases == 1 ~ round(num_couples * 2 * prevalence * (1 - prevalence)), 
+                                       num_parents_cases == 2 ~ round(num_couples * prevalence ^ 2))) %>%
+      dplyr::select(-n)
+    num_to_sample$num_to_sample[num_to_sample$num_parents_cases == 2] <- num_couples - sum(num_to_sample$num_to_sample[num_to_sample$num_parents_cases < 2])
+    set.seed(1)
+    sel_couples <- sim_scores %>%
+      left_join(num_to_sample, by = "num_parents_cases") %>%
+      dplyr::select(couple, num_parents_cases, num_to_sample) %>%
+      distinct() %>%
+      split(.$num_parents_cases) %>%
+      map_dfr(function(x){
+        rows_to_sample <- sample(1:nrow(x), x$num_to_sample[1])
+        x[rows_to_sample, ]
+      })
+    sim_scores_sel <- sim_scores %>%
+      filter(couple %in% sel_couples$couple)
+    sim_scores <- as.data.table(sim_scores_sel)
+  }
   p_info <- l$p_info
   mod <- glm(pheno ~ score, family = binomial(), data = p_info)
   
