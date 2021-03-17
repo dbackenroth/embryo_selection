@@ -103,6 +103,8 @@ ScoreAnalysis <- function(disease, prevalence, r2_liability, norm_approximation)
   grid_lr <- data.frame(strategy = rep("lowest_risk", 20), 
                         n = 1:20)
   res_lr <- pmap_dfr(grid_lr, GetRiskReduction, dat = sim, prevalence = prevalence)
+  print("RRR at n = 5")
+  res_lr %>% filter(n == 5) %>% print()
   res_lr$theoretical <- NA
   for (i in 1:nrow(res_lr)) {
     res_lr$theoretical[i] <- risk_reduction_lowest(r = sqrt(r2_liability), K = prevalence, n = res_lr$n[i])

@@ -39,15 +39,12 @@ variance_plot <- function(disease, prevalence, alpha) {
     group_by(pheno) %>%
     mutate(weight = if_else(pheno == 0, (1 - prevalence) / n(), prevalence / n()))
   wtd_var <- wtd.var(parents$score, weights = parents$weight, normwt = T)
-  cat("Weighted variance parents:", wtd_var, "\n")
-  cat("Unweighted variance parents:", var(parents$score), "\n")
-  cat("Mean variance children conditional on parents:", mean(sampled$var), "\n")
-  cat("Variance parents by phenotype\n")
-  parents %>%
-    ungroup() %>%
-    mutate(pheno = if_else(pheno==1, "Case", "Control")) %>%
-    group_by(pheno) %>%
-    summarise(v = var(score))
+  print(disease)
+  cat("Variance parents (weighted by phenotype):", wtd_var, "\n")
+  #cat("Unweighted variance parents:", var(parents$score), "\n")
+  cat("Variance children (sampled based on parental phenotype):", var(children$score), "\n")
+  cat("Mean within-family variance (after sampling based on parental phenotype):", mean(sampled$var), "\n")
+  
   
   p1 <- ggplot(sampled, aes(x = q, y = var)) + 
     geom_smooth() +#method = 'gam',
