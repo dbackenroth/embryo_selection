@@ -10,6 +10,23 @@ CROHNS <- "crohns"
 SCHIZ <- "schiz"
 SCHIZ_PREVALENCE <- 0.01
 
+ChildScores <- function() {
+  crohns <- fread("~/Documents/Docs/embryos/crohns_sel_family.vcf.scores.sscore")
+  schiz <- fread("~/Documents/Docs/embryos/schiz_sel_family.vcf.scores.sscore")
+  pdf("Results/crohns_qq.pdf")
+  qqnorm(crohns$SCORE1_AVG, pch = 1, frame = FALSE)
+  qqline(crohns$SCORE1_AVG, col = "steelblue", lwd = 2)
+  dev.off()
+  pdf("Results/schiz_qq.pdf")
+  qqnorm(schiz$SCORE1_AVG, pch = 1, frame = FALSE)
+  qqline(schiz$SCORE1_AVG, col = "steelblue", lwd = 2)
+  dev.off()
+  print("Crohns")
+  shapiro.test(crohns$SCORE1_AVG) %>% print()
+  print("Schiz")
+  shapiro.test(schiz$SCORE1_AVG) %>% print()
+}
+
 MakePanelFigure <- function(crohns_prevalence = 0.005) {
   l1 <- variance_plot(CROHNS, crohns_prevalence, alpha = 0.04)
   l2 <- variance_plot(SCHIZ, SCHIZ_PREVALENCE, alpha = 0.04)
