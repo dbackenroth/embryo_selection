@@ -134,6 +134,23 @@ MakeChildrenVCF <- function(couples, n_children = 2, chrs = 1:22,
   write.table(both, out_file, sep = "\t", append = T, row.names = F, quote = F)
 }
 
+OneCouplePerFamily <- function() {
+  couples_grid <- read.csv(COUPLES_FILE, stringsAsFactors = F) %>%
+    filter(pheno.1 == 1 & pheno.2 == 1)
+  set.seed(1)
+  sampled <- sample.int(nrow(couples_grid), 1)
+  sel_couple <- couples_grid %>%
+    slice(sampled) %>%
+    select(ID.1, ID.2)
+  browser()
+  colnames(grid) <- c("p1", "p2")
+  print(grid)
+  out_vcf <- glue("{OUT_DIR}/sel_family.vcf")
+  MakeChildrenVCF(grid, n_children = 400, chrs = 1:22, 
+                  out_file = out_vcf)
+  system(glue("{CALCULATE_SCORES_SCRIPT} {out_vcf}"))
+}
+
 DoRun <- function(groups, number, all = F) {
   set.seed(number)
 	couples_grid <- read.csv(COUPLES_FILE, stringsAsFactors = F)
