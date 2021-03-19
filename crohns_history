@@ -28,6 +28,6 @@ vcftools --gzvcf phased_no_ambiguous_v4.2.vcf.gz --snps daner.valid.snp --recode
 plink2 --vcf score_snps.recode.vcf --freq --out score_snps.recode_freq
 
 source("select_couples.R")
-sbatch do_recombine.sh
+sbatch do_recombine.sh CROHNS
 source("collect_scores.R")
 source("schiz.R") # make plots

@@ -13,12 +13,18 @@ if (exists("run_locally")) {
   VCF_FILE <- "~/Documents/Docs/embryos/LIJMC_score_snps.recode.vcf.gz"
   GWAS_FILE <- "~/Documents/Docs/embryos/daner_flipped.tsv"
   FREQ_FILE <- "~/Documents/Docs/embryos/LIJMC_score_snps.recode_freq.afreq"
-} else {
+} else if (DISEASE == "SCHIZ"){
   MAP_DIR <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/Maps/Refined_genetic_map_b37/"
   OUT_DIR <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/Peds/"
   COUPLES_FILE <- "//cs/icore/db2175/embryo_selection/selected_couples.csv"
   VCF_FILE <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/LIJMC_score_snps.recode.vcf"
   CALCULATE_SCORES_SCRIPT <- "./calculate_scores_children.sh"
+} else if (DISEASE == "CROHNS") {
+  MAP_DIR <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/Maps/Refined_genetic_map_b37/"
+  OUT_DIR <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/crohns/Peds/"
+  COUPLES_FILE <- "//cs/icore/db2175/embryo_selection/selected_couples_crohns.csv"
+  VCF_FILE <- "/vol/sci/bio/data/shai.carmi/db2175/embryo_selection/crohns/score_snps.recode.vcf"
+  CALCULATE_SCORES_SCRIPT <- "./calculate_scores_children_crohns.sh"
 }
 
 #couples <- data.frame(p1 = c("SZPABR0002", "SZPABR0003"), 
