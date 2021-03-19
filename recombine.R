@@ -143,10 +143,10 @@ OneCouplePerFamily <- function() {
     slice(sampled) %>%
     select(ID.1, ID.2)
   browser()
-  colnames(grid) <- c("p1", "p2")
-  print(grid)
+  colnames(sel_couple) <- c("p1", "p2")
+  print(sel_couple)
   out_vcf <- glue("{OUT_DIR}/sel_family.vcf")
-  MakeChildrenVCF(grid, n_children = 400, chrs = 1:22, 
+  MakeChildrenVCF(sel_couple, n_children = 400, chrs = 1:22, 
                   out_file = out_vcf)
   system(glue("{CALCULATE_SCORES_SCRIPT} {out_vcf}"))
 }
