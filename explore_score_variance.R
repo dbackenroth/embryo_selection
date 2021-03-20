@@ -27,6 +27,30 @@ ChildScores <- function() {
   shapiro.test(schiz$SCORE1_AVG) %>% print()
 }
 
+if (F) {
+  ParentScores(SCHIZ, SCHIZ_PREVALENCE)
+  ParentScores(CROHNS, 0.005)
+}
+
+ParentScores <- function(disease, prevalence) {
+  l <- get_data(disease = disease, prevalence = prevalence, num_couples = 5000)
+  par <- l$p_info
+  num_cases <- sum(par$pheno == 0) * prevalence / (1 - prevalence)
+  set.seed(1)
+  parents_sample <- bind_rows(
+    par %>%
+      filter(pheno == 0), 
+    par %>%
+      filter(pheno == 1) %>%
+      slice(sample(n(), round(num_cases))))
+  pdf(glue("Results/parents_{disease}_qq.pdf"))
+  qqnorm(parents_sample$score, pch = 1, frame = FALSE)
+  qqline(parents_sample$score, col = "steelblue", lwd = 2)
+  dev.off()
+  shapiro.test(parents_sample$score) %>% print()
+}
+
+
 MakePanelFigure <- function(crohns_prevalence = 0.005) {
   l1 <- variance_plot(CROHNS, crohns_prevalence, alpha = 0.04)
   l2 <- variance_plot(SCHIZ, SCHIZ_PREVALENCE, alpha = 0.04)
@@ -36,6 +60,9 @@ MakePanelFigure <- function(crohns_prevalence = 0.005) {
                nrow = 2)
   dev.off()
 }
+
+
+
 
 variance_plot <- function(disease, prevalence, alpha) {
   l <- get_data(disease = disease, prevalence = prevalence, num_couples = 5000)
@@ -55,6 +82,7 @@ variance_plot <- function(disease, prevalence, alpha) {
   parents <- l$p_info %>%
     group_by(pheno) %>%
     mutate(weight = if_else(pheno == 0, (1 - prevalence) / n(), prevalence / n()))
+  
   wtd_var <- wtd.var(parents$score, weights = parents$weight, normwt = T)
   print(disease)
   cat("Variance parents (weighted by phenotype):", wtd_var, "\n")
