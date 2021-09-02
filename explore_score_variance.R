@@ -43,6 +43,7 @@ ParentScores <- function(disease, prevalence) {
     par %>%
       filter(pheno == 1) %>%
       slice(sample(n(), round(num_cases))))
+  print(nrow(parents_sample))
   pdf(glue("Results/parents_{disease}_qq.pdf"))
   qqnorm(parents_sample$score, pch = 1, frame = FALSE)
   qqline(parents_sample$score, col = "steelblue", lwd = 2)

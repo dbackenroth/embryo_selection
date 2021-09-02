@@ -107,9 +107,9 @@ get_data_helper <- function(disease) {
 
 get_data <- function(disease = "schiz", prevalence = 0.01, num_couples = 5000) {
   l <- get_data_helper(disease = disease)
-  sim_scores <- l$sim_scores %>%
-    mutate(num_parents_cases = p1_pheno + p2_pheno, 
-           couple = paste(p1, p2))
+  sim_scores <- l$sim_scores
+  sim_scores[, `:=`(num_parents_cases = p1_pheno + p2_pheno, 
+                    couple = paste(p1, p2))] 
   if (!is.null(num_couples)) {
     num_aval_couples <- sim_scores %>%
       group_by(num_parents_cases) %>%

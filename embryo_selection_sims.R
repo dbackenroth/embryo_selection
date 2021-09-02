@@ -13,9 +13,9 @@ MakeSimPanelFigure <- function(crohns_prevalence = 0.005){
   crohns_r2 <- CrohnsR2(crohns_prevalence)
   l2 <- ScoreAnalysis(disease = CROHNS, prevalence = crohns_prevalence, r2_liability = crohns_r2, norm_approximation = T)
   
-  pdf(glue("Results/sim_plot_crohns_prevalence{crohns_prevalence}.pdf"), height = 6, width = 8)
-  grid.arrange(l1$p_hre + ggtitle("A (Schizophrenia)"), l1$p_lr + ggtitle("B (Schizophrenia)"), 
-               l2$p_hre + ggtitle("C (Crohn's Disease)"), l2$p_lr + ggtitle("D (Crohn's Disease)"), 
+  pdf(glue("Results/sim_plot_crohns_prevalence{crohns_prevalence}_with_labels.pdf"), height = 6, width = 8)
+  grid.arrange(l1$p_hre + ggtitle("A (Schizophrenia)\nHigh-risk exclusion"), l1$p_lr + ggtitle("B (Schizophrenia)\nLowest-risk prioritization"), 
+               l2$p_hre + ggtitle("C (Crohn's Disease)\nHigh-risk exclusion"), l2$p_lr + ggtitle("D (Crohn's Disease)\nLowest-risk prioritization"), 
                nrow = 2)
   dev.off()
 }
@@ -65,8 +65,9 @@ ApproxEqual <- function(x, y) {
   abs(x-y) < 0.00001
 }
 
-ScoreAnalysis <- function(disease, prevalence, r2_liability, norm_approximation) {
-  dat <- get_data(disease = disease, prevalence = prevalence, num_couples = 5000)
+ScoreAnalysis <- function(disease, prevalence, r2_liability, norm_approximation, num_couples = 5000, 
+                          n_parents_diseased = NULL) {
+  dat <- get_data(disease = disease, prevalence = prevalence, num_couples = num_couples)
   
   sim <- dat$sim_scores
   parents <- dat$p_info %>%
@@ -89,6 +90,10 @@ ScoreAnalysis <- function(disease, prevalence, r2_liability, norm_approximation)
                                     weights = parents$weight, normwt = T)
   }
   #type=c('quantile','(i-1)/(n-1)','i/(n+1)','i/n')
+  
+  if (!is.null(n_parents_diseased)) {
+    sim <- sim[num_parents_cases == n_parents_diseased, ]
+  }
   
   grid_hre <- data.frame(strategy = rep("hre", nrow(quantiles)), 
                          q_exclude = quantiles$q_exclude, 
@@ -153,7 +158,7 @@ ScoreAnalysis <- function(disease, prevalence, r2_liability, norm_approximation)
     geom_segment(data = for_lines, aes(x = 0, xend = n, y = RRR, yend=RRR)) +
     coord_cartesian(xlim = c(0, 20), ylim=c(0, 100), expand = F)#+ 
     #geom_segment(data = for_lines, aes(x = 0, xend = n, y = theoretical, yend=theoretical))
-  return(list(p_hre = p_hre, p_lr = p_lr))
+  return(list(p_hre = p_hre, p_lr = p_lr, res_lr = res_lr, res_hre = res_hre))
 }
 #best_of_5 <- GetRiskReduction(dat, strategy = "lowest_risk", n = 5)
 #best_of_5 <- GetRisk(dat, )
